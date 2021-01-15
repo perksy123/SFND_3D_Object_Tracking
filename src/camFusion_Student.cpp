@@ -149,11 +149,40 @@ void computeTTCCamera(std::vector<cv::KeyPoint> &kptsPrev, std::vector<cv::KeyPo
     // ...
 }
 
-
-void computeTTCLidar(std::vector<LidarPoint> &lidarPointsPrev,
-                     std::vector<LidarPoint> &lidarPointsCurr, double frameRate, double &TTC)
+double FindClosest(const std::vector<LidarPoint> &points)
 {
-    // ...
+    std::vector<double> distances;
+    for (std::vector<LidarPoint>::const_iterator it = points.begin(); it != points.end(); ++it)
+    {
+        distances.push_back((*it).x);
+    }
+
+    // now sort them
+    std::sort(distances.begin(), distances.end());
+
+    // Now search through the sorted list, returning the first point that is not considered an outlier
+    const double OutlierTolerance = 0.001;
+    double closest = 0.0;
+    for (int index = 0; index < distances.size() - 1; ++index)
+    {
+        closest = distances[index];
+        if (distances[index + 1] - distances[index] < OutlierTolerance)
+        {
+            break;
+        }
+    }
+
+    return closest;
+}
+
+void computeTTCLidar(std::vector<LidarPoint> &lidarPointsPrev, std::vector<LidarPoint> &lidarPointsCurr, double frameRate, double &TTC)
+{
+    // Find the closest point from the previous frame
+    double prevFrameMinX = FindClosest(lidarPointsPrev);
+    double currFrameMinX = FindClosest(lidarPointsCurr);
+
+    double speed = std::abs((currFrameMinX - prevFrameMinX) * frameRate);
+    TTC = currFrameMinX / speed;
 }
 
 bool FindBoxForPoint(const cv::Point2f &point, const std::vector<BoundingBox> &boxes, int &boxId)

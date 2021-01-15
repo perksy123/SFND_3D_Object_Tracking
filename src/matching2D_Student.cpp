@@ -19,7 +19,13 @@ void matchDescriptors(std::vector<cv::KeyPoint> &kPtsSource, std::vector<cv::Key
     }
     else if (matcherType.compare("MAT_FLANN") == 0)
     {
-        // ...
+        if (descSource.type() != CV_32F)
+        { // OpenCV bug workaround : convert binary descriptors to floating point due to a bug in current OpenCV implementation
+            descSource.convertTo(descSource, CV_32F);
+            descRef.convertTo(descRef, CV_32F);
+        }
+
+        matcher = cv::DescriptorMatcher::create(cv::DescriptorMatcher::FLANNBASED);
     }
 
     // perform matching task
@@ -30,8 +36,18 @@ void matchDescriptors(std::vector<cv::KeyPoint> &kPtsSource, std::vector<cv::Key
     }
     else if (selectorType.compare("SEL_KNN") == 0)
     { // k nearest neighbors (k=2)
-
-        // ...
+        vector<vector<cv::DMatch>> kMatches;
+        matcher->knnMatch(descSource, descRef, kMatches, 2);
+    
+        double minDescriptorDistanceRatio = 0.8;
+        for (vector<vector<cv::DMatch>>::iterator it = kMatches.begin(); it != kMatches.end(); ++it)
+        {
+            // Only accept if the descriptor distance ratio is lower (i.e the match is better) than the above tolerance
+            if ((*it)[0].distance < minDescriptorDistanceRatio * (*it)[1].distance)
+            {
+                matches.push_back((*it)[0]);
+            } 
+        }
     }
 }
 
@@ -51,8 +67,26 @@ void descKeypoints(vector<cv::KeyPoint> &keypoints, cv::Mat &img, cv::Mat &descr
     }
     else
     {
-
-        //...
+        if (descriptorType.compare("BRIEF") == 0)
+        {
+            extractor = cv::xfeatures2d::BriefDescriptorExtractor::create();
+        }
+        else if (descriptorType.compare("ORB") == 0)
+        {
+            extractor = cv::ORB::create();
+        }
+        else if (descriptorType.compare("FREAK") == 0)
+        {
+            extractor = cv::xfeatures2d::FREAK::create();
+        }
+        else if (descriptorType.compare("AKAZE") == 0)
+        {
+            extractor = cv::AKAZE::create();
+        }
+        else if (descriptorType.compare("SIFT") == 0)
+        {
+            extractor = cv::xfeatures2d::SiftDescriptorExtractor::create();
+        }
     }
 
     // perform feature description

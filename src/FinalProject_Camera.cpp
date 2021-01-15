@@ -129,10 +129,10 @@ int main(int argc, const char *argv[])
         clusterLidarWithROI((dataBuffer.end()-1)->boundingBoxes, (dataBuffer.end() - 1)->lidarPoints, shrinkFactor, P_rect_00, R_rect_00, RT);
 
         // Visualize 3D objects
-        bVis = false;
+        bVis = true;
         if(bVis)
         {
-            show3DObjects((dataBuffer.end()-1)->boundingBoxes, cv::Size(4.0, 20.0), cv::Size(2000, 2000), true);
+            show3DObjects((dataBuffer.end()-1)->boundingBoxes, cv::Size(4.0, 20.0), cv::Size(1000, 1000), true);
         }
         bVis = false;
 
@@ -158,7 +158,32 @@ int main(int argc, const char *argv[])
         }
         else
         {
-            //...
+            cv::Ptr<cv::FeatureDetector> detector;
+            if (detectorType.compare("FAST") == 0)
+            {
+                detector = cv::FastFeatureDetector::create(30, true, cv::FastFeatureDetector::TYPE_9_16);
+            }
+            else if (detectorType.compare("BRISK") == 0)
+            {
+                detector = cv::BRISK::create();
+            }
+            else if (detectorType.compare("ORB") == 0)
+            {
+                detector = cv::ORB::create();
+            }
+            else if (detectorType.compare("AKAZE") == 0)
+            {
+                detector = cv::AKAZE::create();
+            }
+            else if (detectorType.compare("FREAK") == 0)
+            {
+                detector = cv::xfeatures2d::FREAK::create();
+            }
+            else if (detectorType.compare("SIFT") == 0)
+            {
+                detector = cv::xfeatures2d::SIFT::create();           
+            }
+            detector->detect(imgGray, keypoints);
         }
 
         // optional : limit number of keypoints (helpful for debugging and learning)
