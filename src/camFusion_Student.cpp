@@ -149,6 +149,33 @@ void computeTTCCamera(std::vector<cv::KeyPoint> &kptsPrev, std::vector<cv::KeyPo
     // ...
 }
 
+bool LidarPointCompare(const LidarPoint & i, const LidarPoint &j)
+{
+    return (i.x < j.x);
+}
+
+double FindClosestLidarPoint(const std::vector<LidarPoint> &points)
+{
+    std::vector<LidarPoint> distances(points);
+
+    // now sort them in x
+    std::sort(distances.begin(), distances.end(), LidarPointCompare);
+
+    // Now search through the sorted list, returning the first point that is not considered an outlier
+    const double OutlierTolerance = 0.001;
+    double closest = 0.0;
+    for (int index = 0; index < distances.size() - 1; ++index)
+    {
+        closest = distances[index].x;
+        if (distances[index + 1].x - distances[index].x < OutlierTolerance)
+        {
+            break;
+        }
+    }
+
+    return closest;
+}
+
 double FindClosest(const std::vector<LidarPoint> &points)
 {
     std::vector<double> distances;
@@ -175,14 +202,89 @@ double FindClosest(const std::vector<LidarPoint> &points)
     return closest;
 }
 
+double FindClosestHistogramMethod(const std::vector<LidarPoint> &points)
+{
+    std::vector<double> distances;
+    for (std::vector<LidarPoint>::const_iterator it = points.begin(); it != points.end(); ++it)
+    {
+        distances.push_back((*it).x);
+    }
+
+    // now sort them
+    std::sort(distances.begin(), distances.end());
+    double binWidth = 0.002; // 1mm
+    std::map<double, int> histogram;
+    double bin = distances[0];
+
+    // Build the histogram. Note : This loop was adapted from the stackoverlow post https://stackoverflow.com/questions/49458662
+    // Could make the histogram into a class - but I don't have time at the mo. Think boost may have one. Surprised if it doesn't
+    for (std::vector<double>::const_iterator it = distances.begin(); it != distances.end(); ++it)
+    {
+        const double &dist = *it;
+        while (dist > bin + binWidth)
+            bin += binWidth;
+        
+        ++histogram[bin];
+    }
+
+    // Choose the lower %ile bin as the closest distance
+    int histPop = distances.size();
+    int lowerPercentileBinPop = 10.0/100.0 * histPop;
+
+    // Now locate the bin
+    int cumulativeHistPop = 0;
+    double closest = 0.0;
+    for (std::map<double, int>::const_iterator it = histogram.begin(); it != histogram.end(); ++it)
+    {
+        cumulativeHistPop += (*it).second;
+        if (cumulativeHistPop > lowerPercentileBinPop)
+        {
+            closest = (*it).first + (binWidth / 2);
+            break;
+        }
+    }
+
+    return closest;
+}
+
+// I have tried 2 methods for rejecting outlier points 'FindClosest' simply iterates through a sorted array of distances until the delta between 
+// adjacent distances is less than a tolerance.
+// 'FindClosestHistogramMethod' generates a histogram and then rejects ditances that are below the specified percentile population tolerance.
+// I settled on the histogram method as this appears to produce (slightly) more consistent results.
+// I have also used an 'avg' speed when computing the TTC as there appears to be genuine fluctuations in the measured distances between scans, leading to
+// significant variations in instantaneous speed and hence TTC.
 void computeTTCLidar(std::vector<LidarPoint> &lidarPointsPrev, std::vector<LidarPoint> &lidarPointsCurr, double frameRate, double &TTC)
 {
     // Find the closest point from the previous frame
-    double prevFrameMinX = FindClosest(lidarPointsPrev);
-    double currFrameMinX = FindClosest(lidarPointsCurr);
+    static bool firstFrame = true;
+    static double lastMinX = 0.0;
+    static double firstX = 0.0;
+    static int frameCount = 1;
+    double prevFrameMinX;
+    double currFrameMinX;
+    if (firstFrame)
+    {
+        prevFrameMinX = FindClosestHistogramMethod(lidarPointsPrev);
+        currFrameMinX = FindClosestHistogramMethod(lidarPointsCurr);
+        firstX = prevFrameMinX;
+        firstFrame = false;
+    }
+    else
+    {
+        prevFrameMinX = lastMinX;
+        currFrameMinX = FindClosestHistogramMethod(lidarPointsCurr);
+    }
+    lastMinX = currFrameMinX;
+    double delta = std::abs(currFrameMinX - prevFrameMinX);
 
-    double speed = std::abs((currFrameMinX - prevFrameMinX) * frameRate);
-    TTC = currFrameMinX / speed;
+    double speed = delta * frameRate;
+    double avgSpeed = std::abs(currFrameMinX - firstX) * frameRate / frameCount;
+    ++frameCount;
+//    TTC = currFrameMinX / speed;
+    TTC = currFrameMinX / avgSpeed;
+
+    std::cout << "Delta X = " << delta << "m, Min X = " << currFrameMinX << "m, Speed = " << speed << "m, Avg Speed = " << avgSpeed << "m/s, TTC = " << TTC << "s" << std::endl;
+
 }
 
 bool FindBoxForPoint(const cv::Point2f &point, const std::vector<BoundingBox> &boxes, int &boxId)
