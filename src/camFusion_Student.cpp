@@ -134,11 +134,48 @@ void show3DObjects(std::vector<BoundingBox> &boundingBoxes, cv::Size worldSize, 
     }
 }
 
+double GetSeparation(const cv::Point2f &p1, const cv::Point2f &p2)
+{
+    return cv::norm(p1 - p2);
+}
 
 // associate a given bounding box with the keypoints it contains
 void clusterKptMatchesWithROI(BoundingBox &boundingBox, std::vector<cv::KeyPoint> &kptsPrev, std::vector<cv::KeyPoint> &kptsCurr, std::vector<cv::DMatch> &kptMatches)
 {
-    // ...
+    std::vector<cv::DMatch> potentialRoiMatches;
+    std::vector<double> keyPointSeparation;
+    double separationAccumulator = 0.0;
+
+    for (std::vector<cv::DMatch>::const_iterator it = kptMatches.begin(); it != kptMatches.end(); ++it)
+    {
+        const cv::DMatch match = *it;
+        const cv::Point2f &matchPt = kptsCurr[match.trainIdx].pt;
+        if (boundingBox.roi.contains(matchPt))
+        {
+            // This point is within the bounding box
+            potentialRoiMatches.push_back(match);
+
+            // Accumulate the distance (so a mean can be formed)
+            double separation = GetSeparation(matchPt, kptsPrev[match.queryIdx].pt);
+            keyPointSeparation.push_back(separation);
+            separationAccumulator += separation;
+        }
+    }
+
+    // Now calculate the mean pt separation and use this to reject errouneous matches
+    if (keyPointSeparation.size() > 0)
+    {
+        double separationMean = separationAccumulator / keyPointSeparation.size();
+        double separationRejectTolerance = 3.0;
+        for (int index = 0; index < keyPointSeparation.size(); ++index)
+        {
+            if (std::abs(separationMean - keyPointSeparation[index]) < separationRejectTolerance)
+            {
+                boundingBox.kptMatches.push_back(potentialRoiMatches[index]);
+                boundingBox.keypoints.push_back(kptsCurr[potentialRoiMatches[index].trainIdx]);
+            } 
+        }
+    }
 }
 
 
@@ -280,8 +317,8 @@ void computeTTCLidar(std::vector<LidarPoint> &lidarPointsPrev, std::vector<Lidar
     double speed = delta * frameRate;
     double avgSpeed = std::abs(currFrameMinX - firstX) * frameRate / frameCount;
     ++frameCount;
-//    TTC = currFrameMinX / speed;
-    TTC = currFrameMinX / avgSpeed;
+    TTC = currFrameMinX / speed;
+//    TTC = currFrameMinX / avgSpeed;
 
     std::cout << "Delta X = " << delta << "m, Min X = " << currFrameMinX << "m, Speed = " << speed << "m, Avg Speed = " << avgSpeed << "m/s, TTC = " << TTC << "s" << std::endl;
 
