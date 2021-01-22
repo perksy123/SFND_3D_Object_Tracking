@@ -142,48 +142,78 @@ double GetSeparation(const cv::Point2f &p1, const cv::Point2f &p2)
 // associate a given bounding box with the keypoints it contains
 void clusterKptMatchesWithROI(BoundingBox &boundingBox, std::vector<cv::KeyPoint> &kptsPrev, std::vector<cv::KeyPoint> &kptsCurr, std::vector<cv::DMatch> &kptMatches)
 {
-    std::vector<cv::DMatch> potentialRoiMatches;
-    std::vector<double> keyPointSeparation;
-    double separationAccumulator = 0.0;
-
     for (std::vector<cv::DMatch>::const_iterator it = kptMatches.begin(); it != kptMatches.end(); ++it)
     {
         const cv::DMatch match = *it;
         const cv::Point2f &matchPt = kptsCurr[match.trainIdx].pt;
+        double separationRejectTolerance = 10.0;
         if (boundingBox.roi.contains(matchPt))
         {
             // This point is within the bounding box
-            potentialRoiMatches.push_back(match);
 
-            // Accumulate the distance (so a mean can be formed)
+            // Calculate the separation distance between the matched pointxs in this and the previous frame
             double separation = GetSeparation(matchPt, kptsPrev[match.queryIdx].pt);
-            keyPointSeparation.push_back(separation);
-            separationAccumulator += separation;
-        }
-    }
-
-    // Now calculate the mean pt separation and use this to reject errouneous matches
-    if (keyPointSeparation.size() > 0)
-    {
-        double separationMean = separationAccumulator / keyPointSeparation.size();
-        double separationRejectTolerance = 3.0;
-        for (int index = 0; index < keyPointSeparation.size(); ++index)
-        {
-            if (std::abs(separationMean - keyPointSeparation[index]) < separationRejectTolerance)
+            if (separation < separationRejectTolerance)
             {
-                boundingBox.kptMatches.push_back(potentialRoiMatches[index]);
-                boundingBox.keypoints.push_back(kptsCurr[potentialRoiMatches[index].trainIdx]);
-            } 
+                boundingBox.kptMatches.push_back(match);
+                boundingBox.keypoints.push_back(kptsCurr[match.trainIdx]);
+            }
         }
     }
 }
 
 
 // Compute time-to-collision (TTC) based on keypoint correspondences in successive images
-void computeTTCCamera(std::vector<cv::KeyPoint> &kptsPrev, std::vector<cv::KeyPoint> &kptsCurr, 
-                      std::vector<cv::DMatch> kptMatches, double frameRate, double &TTC, cv::Mat *visImg)
+void computeTTCCamera(std::vector<cv::KeyPoint> &kptsPrev, std::vector<cv::KeyPoint> &kptsCurr, std::vector<cv::DMatch> &kptMatches, double frameRate, double &TTC, cv::Mat *visImg)
 {
-    // ...
+    // Outer loop through the keypoint matches
+    std::vector<double> separationRatios;
+    for (std::vector<cv::DMatch>::const_iterator it1 = kptMatches.begin(); it1 != kptMatches.end(); ++it1)
+    {
+        // Get the match
+        const cv::DMatch &matchLeft = *it1;
+        // .. and the point in the current and previous frame
+        const cv::KeyPoint &currFrPtLeft = kptsCurr[matchLeft.trainIdx];
+        const cv::KeyPoint &prevFrPtLeft = kptsPrev[matchLeft.queryIdx];
+
+        // Now loop through the remaining points (that haven't already been considered) and calculate the separation between the two sets of keypoints
+        // and then the separation ratios
+        for (std::vector<cv::DMatch>::const_iterator it2 = it1; it2 != kptMatches.end(); ++it2)
+        {
+            // Get the match
+            const cv::DMatch &matchRight = *it2;
+            // .. and the point in the current and previous frame
+            const cv::KeyPoint &currFrPtRight = kptsCurr[matchRight.trainIdx];
+            const cv::KeyPoint &prevFrPtRight = kptsPrev[matchRight.queryIdx];
+
+            // Calculate the separations
+            double currFrSep = GetSeparation(currFrPtLeft.pt, currFrPtRight.pt);
+            double prevFrSep = GetSeparation(prevFrPtLeft.pt, prevFrPtRight.pt);
+
+            // Calculate and store the ration of the separations
+            if (prevFrSep > 0)
+            {
+                separationRatios.push_back(currFrSep / prevFrSep);
+            }
+        }
+    }
+
+    // sort the separation ratios
+    std::sort(separationRatios.begin(), separationRatios.end());
+    int centreIndex = std::floor(separationRatios.size() / 2.0);
+    double separationRatioMedian = separationRatios.size() % 2 == 0 ? (separationRatios[centreIndex] + separationRatios[centreIndex + 1]) / 2.0 : separationRatios[centreIndex];
+
+    // Try using the average
+    double separationRatioMean = 0.0;
+    for (std::vector<double>::const_iterator it = separationRatios.begin(); it != separationRatios.end(); ++it)
+    {
+        separationRatioMean += *it;
+    }
+
+    separationRatioMean /= separationRatios.size();
+
+    double frameTimeSpan = 1.0 / frameRate;
+    TTC = -frameTimeSpan / (1.0 - separationRatioMean);
 }
 
 bool LidarPointCompare(const LidarPoint & i, const LidarPoint &j)
