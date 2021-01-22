@@ -1,5 +1,7 @@
 
 #include <iostream>
+#include <fstream>
+#include <sstream>
 #include <algorithm>
 #include <numeric>
 #include <opencv2/highgui/highgui.hpp>
@@ -140,6 +142,10 @@ double GetSeparation(const cv::Point2f &p1, const cv::Point2f &p2)
 }
 
 // associate a given bounding box with the keypoints it contains
+// I have not used an average here as it doesn;t seem appropriate. I'm expecting the separation in keypoint positin between the current & previous frames
+// to be quite small so have just rejected outliers based upon a max keypoint separation. I don't think its possible to reject a keypoint match based upon the
+// prev-curr pt separation being too small.
+// 
 void clusterKptMatchesWithROI(BoundingBox &boundingBox, std::vector<cv::KeyPoint> &kptsPrev, std::vector<cv::KeyPoint> &kptsCurr, std::vector<cv::DMatch> &kptMatches)
 {
     for (std::vector<cv::DMatch>::const_iterator it = kptMatches.begin(); it != kptMatches.end(); ++it)
@@ -318,9 +324,9 @@ double FindClosestHistogramMethod(const std::vector<LidarPoint> &points)
 // adjacent distances is less than a tolerance.
 // 'FindClosestHistogramMethod' generates a histogram and then rejects ditances that are below the specified percentile population tolerance.
 // I settled on the histogram method as this appears to produce (slightly) more consistent results.
-// I have also used an 'avg' speed when computing the TTC as there appears to be genuine fluctuations in the measured distances between scans, leading to
+// I have also tried using an 'avg' speed when computing the TTC as there appears to be genuine fluctuations in the measured distances between scans, leading to
 // significant variations in instantaneous speed and hence TTC.
-void computeTTCLidar(std::vector<LidarPoint> &lidarPointsPrev, std::vector<LidarPoint> &lidarPointsCurr, double frameRate, double &TTC)
+void computeTTCLidar(std::vector<LidarPoint> &lidarPointsPrev, std::vector<LidarPoint> &lidarPointsCurr, double frameRate, double &TTC, ofstream &resultsFile)
 {
     // Find the closest point from the previous frame
     static bool firstFrame = true;
@@ -350,8 +356,7 @@ void computeTTCLidar(std::vector<LidarPoint> &lidarPointsPrev, std::vector<Lidar
     TTC = currFrameMinX / speed;
 //    TTC = currFrameMinX / avgSpeed;
 
-    std::cout << "Delta X = " << delta << "m, Min X = " << currFrameMinX << "m, Speed = " << speed << "m, Avg Speed = " << avgSpeed << "m/s, TTC = " << TTC << "s" << std::endl;
-
+    resultsFile << delta << ", " << currFrameMinX << ", " << speed << ", " << avgSpeed << ", " << TTC << std::endl;
 }
 
 bool FindBoxForPoint(const cv::Point2f &point, const std::vector<BoundingBox> &boxes, int &boxId)
