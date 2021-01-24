@@ -170,8 +170,8 @@ void clusterKptMatchesWithROI(BoundingBox &boundingBox, std::vector<cv::KeyPoint
 
 
 // Compute time-to-collision (TTC) based on keypoint correspondences in successive images
-void computeTTCCamera(std::vector<cv::KeyPoint> &kptsPrev, std::vector<cv::KeyPoint> &kptsCurr, std::vector<cv::DMatch> &kptMatches, double frameRate, double &TTC, std::ofstream &resultsFile, cv::Mat *visImg)
-//void computeTTCCamera(std::vector<cv::KeyPoint> &kptsPrev, std::vector<cv::KeyPoint> &kptsCurr, std::vector<cv::DMatch> &kptMatches, double frameRate, double &TTC, cv::Mat *visImg)
+//void computeTTCCamera(std::vector<cv::KeyPoint> &kptsPrev, std::vector<cv::KeyPoint> &kptsCurr, std::vector<cv::DMatch> &kptMatches, double frameRate, double &TTC, std::ofstream &resultsFile, cv::Mat *visImg)
+void computeTTCCamera(std::vector<cv::KeyPoint> &kptsPrev, std::vector<cv::KeyPoint> &kptsCurr, std::vector<cv::DMatch> &kptMatches, double frameRate, double &TTC, cv::Mat *visImg)
 {
     // Outer loop through the keypoint matches
     std::vector<double> separationRatios;
@@ -225,7 +225,7 @@ void computeTTCCamera(std::vector<cv::KeyPoint> &kptsPrev, std::vector<cv::KeyPo
     double frameTimeSpan = 1.0 / frameRate;
     TTC = -frameTimeSpan / (1.0 - separationRatioMedian);
 
-    resultsFile << separationRatios.size() << ", " << separationRatioMedian << ", " << TTC << std::endl;
+//    resultsFile << separationRatios.size() << ", " << separationRatioMedian << ", " << TTC << std::endl;
 
 }
 
