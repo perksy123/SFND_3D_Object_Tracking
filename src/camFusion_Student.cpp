@@ -186,20 +186,23 @@ void computeTTCCamera(std::vector<cv::KeyPoint> &kptsPrev, std::vector<cv::KeyPo
         // and then the separation ratios
         for (std::vector<cv::DMatch>::const_iterator it2 = it1; it2 != kptMatches.end(); ++it2)
         {
-            // Get the match
-            const cv::DMatch &matchRight = *it2;
-            // .. and the point in the current and previous frame
-            const cv::KeyPoint &currFrPtRight = kptsCurr[matchRight.trainIdx];
-            const cv::KeyPoint &prevFrPtRight = kptsPrev[matchRight.queryIdx];
-
-            // Calculate the separations
-            double currFrSep = GetSeparation(currFrPtLeft.pt, currFrPtRight.pt);
-            double prevFrSep = GetSeparation(prevFrPtLeft.pt, prevFrPtRight.pt);
-
-            // Calculate and store the ration of the separations
-            if (prevFrSep > 0)
+            if (it1 != it2)
             {
-                separationRatios.push_back(currFrSep / prevFrSep);
+                // Get the match
+                const cv::DMatch &matchRight = *it2;
+                // .. and the point in the current and previous frame
+                const cv::KeyPoint &currFrPtRight = kptsCurr[matchRight.trainIdx];
+                const cv::KeyPoint &prevFrPtRight = kptsPrev[matchRight.queryIdx];
+
+                // Calculate the separations
+                double currFrSep = GetSeparation(currFrPtLeft.pt, currFrPtRight.pt);
+                double prevFrSep = GetSeparation(prevFrPtLeft.pt, prevFrPtRight.pt);
+
+                // Calculate and store the ration of the separations
+                if (prevFrSep > 0)
+                {
+                    separationRatios.push_back(currFrSep / prevFrSep);
+                }
             }
         }
     }
@@ -220,33 +223,14 @@ void computeTTCCamera(std::vector<cv::KeyPoint> &kptsPrev, std::vector<cv::KeyPo
 
     double frameTimeSpan = 1.0 / frameRate;
     TTC = -frameTimeSpan / (1.0 - separationRatioMean);
+
+//    resultsFile << separationRatios.size() << ", " << separationRatioMean << ", " << TTC << std::endl;
+
 }
 
 bool LidarPointCompare(const LidarPoint & i, const LidarPoint &j)
 {
     return (i.x < j.x);
-}
-
-double FindClosestLidarPoint(const std::vector<LidarPoint> &points)
-{
-    std::vector<LidarPoint> distances(points);
-
-    // now sort them in x
-    std::sort(distances.begin(), distances.end(), LidarPointCompare);
-
-    // Now search through the sorted list, returning the first point that is not considered an outlier
-    const double OutlierTolerance = 0.001;
-    double closest = 0.0;
-    for (int index = 0; index < distances.size() - 1; ++index)
-    {
-        closest = distances[index].x;
-        if (distances[index + 1].x - distances[index].x < OutlierTolerance)
-        {
-            break;
-        }
-    }
-
-    return closest;
 }
 
 double FindClosest(const std::vector<LidarPoint> &points)
@@ -326,7 +310,7 @@ double FindClosestHistogramMethod(const std::vector<LidarPoint> &points)
 // I settled on the histogram method as this appears to produce (slightly) more consistent results.
 // I have also tried using an 'avg' speed when computing the TTC as there appears to be genuine fluctuations in the measured distances between scans, leading to
 // significant variations in instantaneous speed and hence TTC.
-void computeTTCLidar(std::vector<LidarPoint> &lidarPointsPrev, std::vector<LidarPoint> &lidarPointsCurr, double frameRate, double &TTC, ofstream &resultsFile)
+void computeTTCLidar(std::vector<LidarPoint> &lidarPointsPrev, std::vector<LidarPoint> &lidarPointsCurr, double frameRate, double &TTC)
 {
     // Find the closest point from the previous frame
     static bool firstFrame = true;
@@ -356,7 +340,7 @@ void computeTTCLidar(std::vector<LidarPoint> &lidarPointsPrev, std::vector<Lidar
     TTC = currFrameMinX / speed;
 //    TTC = currFrameMinX / avgSpeed;
 
-    resultsFile << delta << ", " << currFrameMinX << ", " << speed << ", " << avgSpeed << ", " << TTC << std::endl;
+//    resultsFile << delta << ", " << currFrameMinX << ", " << speed << ", " << avgSpeed << ", " << TTC << std::endl;
 }
 
 bool FindBoxForPoint(const cv::Point2f &point, const std::vector<BoundingBox> &boxes, int &boxId)
